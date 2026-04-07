@@ -1,34 +1,28 @@
-# sheets.py
 import os
-import pickle
+import json
 import gspread
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # ============================
-# GOOGLE LOGIN
+# GOOGLE LOGIN (Render version)
 # ============================
+
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 def get_gsheet_client():
-    creds = None
+    # Lấy JSON từ biến môi trường GOOGLE_CREDENTIALS
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS")
 
-    if os.path.exists("token.pickle"):
-        with open("token.pickle", "rb") as token:
-            creds = pickle.load(token)
+    if not creds_json:
+        raise Exception("GOOGLE_CREDENTIALS is missing in Render Environment")
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                "credentials.json", SCOPES
-            )
-            creds = flow.run_local_server(port=0)
+    creds_dict = json.loads(creds_json)
 
-        with open("token.pickle", "wb") as token:
-            pickle.dump(creds, token)
+    creds = Credentials.from_service_account_info(
+        creds_dict,
+        scopes=SCOPES
+    )
 
     return gspread.authorize(creds)
 
@@ -49,7 +43,6 @@ CATEGORY_SHEETS = {
 
 CONSUMABLE_SHEET = "消耗品管理"
 
-# Column index
 COL_JIG = 1
 COL_DESC = 2
 COL_STATUS = 3
@@ -61,13 +54,13 @@ COL_RETURN_DATE = 8
 
 
 # ============================
-# HELPER FUNCTIONS
+# HELPER
 # ============================
+def today():
+    return datetime.now().strftime("%Y/%m/%d")
+
+
 def find_jig(jig_id):
-    """
-    Tìm JIG trong tất cả category.
-    Trả về (category, row, row_data) hoặc (None, None, None)
-    """
     for category, sheet_name in CATEGORY_SHEETS.items():
         ws = book.worksheet(sheet_name)
         values = ws.get_all_values()
@@ -77,10 +70,6 @@ def find_jig(jig_id):
                 return category, idx, row
 
     return None, None, None
-
-
-def today():
-    return datetime.now().strftime("%Y/%m/%d")
 
 
 # ============================
@@ -97,7 +86,6 @@ def borrow_jig(jig_id, qty):
     if status == "貸出中":
         return False, f"JIG {jig_id} は既に貸出中です。"
 
-    # Update status
     ws = book.worksheet(CATEGORY_SHEETS[category])
     ws.update_cell(row, COL_STATUS, "貸出中")
     ws.update_cell(row, COL_USER, "WEB USER")
@@ -165,34 +153,3 @@ def reserve_jig(jig_id, qty):
         f"数量: {qty}\n"
         f"予約日: {today()}"
     )
-
-
-# ============================
-# CONSUMABLES (giữ nguyên)
-# ============================
-def get_consumables():
-    ws = book.worksheet(CONSUMABLE_SHEET)
-    values = ws.get_all_values()
-
-    results = []
-    for idx, row in enumerate(values[1:], start=2):
-        name = row[0].strip()
-        qty_raw = row[1].strip()
-
-        try:
-            qty = int(qty_raw)
-        except:
-            qty = 0
-
-        results.append({
-            "row": idx,
-            "name": name,
-            "stock": qty
-        })
-
-    return results
-
-
-def update_consumable_stock(row, new_stock):
-    ws = book.worksheet(CONSUMABLE_SHEET)
-    ws.update_cell(row, 2, new_stock)
