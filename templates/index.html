@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>SMT JIG 管理</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <h1>SMT JIG 管理 Web</h1>
+  <button id="test-btn">テスト送信</button>
+
+  <pre id="log"></pre>
+
+  <script>
+    const socket = io();
+
+    const log = (msg) => {
+      const el = document.getElementById('log');
+      el.textContent += msg + "\n";
+    };
+
+    socket.on('connect', () => {
+      log('接続しました');
+    });
+
+    socket.on('disconnect', () => {
+      log('切断されました');
+    });
+
+    socket.on('broadcast_message', (data) => {
+      log('受信: ' + data.message);
+    });
+
+    document.getElementById('test-btn').onclick = () => {
+      socket.emit('test_event', { message: 'クライアントから送信' });
+    };
+  </script>
+</body>
+</html>
