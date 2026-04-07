@@ -1,39 +1,239 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>SMT JIG 管理</title>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-</head>
-<body>
-  <h1>SMT JIG 管理 Web</h1>
-  <button id="test-btn">テスト送信</button>
+  <meta charset="UTF-8" />
+  <title>SMT JIG 管理 Web</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-  <pre id="log"></pre>
+  <style>
+    body {
+      margin: 0;
+      background: #e5e5e5;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .chat-wrapper {
+      width: 420px;
+      height: 720px;
+      background: #f5f5f5;
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      background: #06c755;
+      color: #fff;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #b2ffb2;
+    }
+
+    .chat-body {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      background: #d4e6ff;
+    }
+
+    .message-row {
+      display: flex;
+      margin-bottom: 8px;
+    }
+
+    .message-row.bot {
+      justify-content: flex-start;
+    }
+
+    .message-row.user {
+      justify-content: flex-end;
+    }
+
+    .bubble {
+      max-width: 75%;
+      padding: 8px 10px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.4;
+      word-wrap: break-word;
+    }
+
+    .bubble.bot {
+      background: #ffffff;
+      border-bottom-left-radius: 2px;
+    }
+
+    .bubble.user {
+      background: #c7f5c4;
+      border-bottom-right-radius: 2px;
+    }
+
+    .timestamp {
+      font-size: 10px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .quick-replies {
+      padding: 8px 12px;
+      border-top: 1px solid #ddd;
+      background: #fdfdfd;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .quick-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      background: #ffffff;
+      border: 1px solid #ddd;
+      transition: background 0.15s, transform 0.05s;
+    }
+
+    .quick-btn:hover {
+      background: #f0f0f0;
+    }
+
+    .quick-btn:active {
+      transform: scale(0.97);
+    }
+
+    .chat-input-area {
+      padding: 8px 10px;
+      border-top: 1px solid #ddd;
+      background: #fafafa;
+      display: flex;
+      gap: 6px;
+    }
+
+    .chat-input {
+      flex: 1;
+      border-radius: 16px;
+      border: 1px solid #ccc;
+      padding: 6px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .send-btn {
+      border-radius: 16px;
+      border: none;
+      padding: 6px 12px;
+      font-size: 13px;
+      background: #06c755;
+      color: #fff;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="chat-wrapper">
+    <div class="chat-header">
+      <div class="status-dot"></div>
+      <div class="chat-header-title">SMT JIG 管理 Bot</div>
+    </div>
+
+    <div id="chat-body" class="chat-body"></div>
+
+    <div class="quick-replies">
+      <button class="quick-btn" data-action="borrow">JIG 借用</button>
+      <button class="quick-btn" data-action="return">JIG 返却</button>
+      <button class="quick-btn" data-action="reserve">JIG 予約</button>
+      <button class="quick-btn" data-action="consumables">消耗品 使用</button>
+      <button class="quick-btn" data-action="status">状況一覧</button>
+    </div>
+
+    <div class="chat-input-area">
+      <input id="chat-input" class="chat-input" placeholder="メッセージを入力..." />
+      <button id="send-btn" class="send-btn">送信</button>
+    </div>
+  </div>
 
   <script>
     const socket = io();
+    const chatBody = document.getElementById("chat-body");
+    const input = document.getElementById("chat-input");
+    const sendBtn = document.getElementById("send-btn");
 
-    const log = (msg) => {
-      const el = document.getElementById('log');
-      el.textContent += msg + "\n";
-    };
+    function nowTime() {
+      const d = new Date();
+      return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    }
 
-    socket.on('connect', () => {
-      log('接続しました');
+    function addMessage(text, sender = "bot") {
+      const row = document.createElement("div");
+      row.className = `message-row ${sender}`;
+
+      const bubble = document.createElement("div");
+      bubble.className = `bubble ${sender}`;
+      bubble.textContent = text;
+
+      const time = document.createElement("div");
+      time.className = "timestamp";
+      time.textContent = nowTime();
+
+      const wrap = document.createElement("div");
+      wrap.appendChild(bubble);
+      wrap.appendChild(time);
+
+      row.appendChild(wrap);
+      chatBody.appendChild(row);
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
+
+    // Khi kết nối
+    socket.on("connect", () => {
+      addMessage("接続しました。ご用件を選択してください。");
     });
 
-    socket.on('disconnect', () => {
-      log('切断されました');
+    // Bot trả lời
+    socket.on("bot_message", (data) => {
+      addMessage(data.message, "bot");
     });
 
-    socket.on('broadcast_message', (data) => {
-      log('受信: ' + data.message);
+    // Gửi text
+    function sendTextMessage() {
+      const text = input.value.trim();
+      if (!text) return;
+
+      addMessage(text, "user");
+      socket.emit("user_message", { text });
+
+      input.value = "";
+    }
+
+    sendBtn.addEventListener("click", sendTextMessage);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendTextMessage();
     });
 
-    document.getElementById('test-btn').onclick = () => {
-      socket.emit('test_event', { message: 'クライアントから送信' });
-    };
+    // Quick reply
+    document.querySelectorAll(".quick-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const action = btn.dataset.action;
+        addMessage(btn.textContent, "user");
+        socket.emit("user_action", { action });
+      });
+    });
   </script>
 </body>
 </html>

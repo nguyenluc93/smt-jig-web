@@ -4,21 +4,20 @@ import pickle
 import gspread
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from datetime import datetime
 
 # ============================
-# GOOGLE OAUTH LOGIN
+# GOOGLE LOGIN
 # ============================
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 def get_gsheet_client():
     creds = None
 
-    # Load token nếu có
     if os.path.exists("token.pickle"):
         with open("token.pickle", "rb") as token:
             creds = pickle.load(token)
 
-    # Nếu chưa có token hoặc token hết hạn
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
@@ -28,7 +27,6 @@ def get_gsheet_client():
             )
             creds = flow.run_local_server(port=0)
 
-        # Lưu token
         with open("token.pickle", "wb") as token:
             pickle.dump(creds, token)
 
@@ -43,7 +41,6 @@ client = get_gsheet_client()
 SHEET_ID = "16VAlFUV_r41rBwW7TqUWMNMmHjKB8EX6l7ef9PZL5Hw"
 book = client.open_by_key(SHEET_ID)
 
-# Map category → sheet name
 CATEGORY_SHEETS = {
     "HEAD": "ヘッドOH用",
     "LINEAR": "その他交換用",
@@ -52,111 +49,133 @@ CATEGORY_SHEETS = {
 
 CONSUMABLE_SHEET = "消耗品管理"
 
-# Cột trong sheet JIG
+# Column index
 COL_JIG = 1
 COL_DESC = 2
 COL_STATUS = 3
 COL_USER = 4
 COL_NOTE = 5
-COL_RESERVE_DATE = 6     # 借出予定日
-COL_BORROW_DATE = 7      # 借出日
-COL_RETURN_DATE = 8      # 返却予定日
+COL_RESERVE_DATE = 6
+COL_BORROW_DATE = 7
+COL_RETURN_DATE = 8
 
 
 # ============================
-# JIG FUNCTIONS
+# HELPER FUNCTIONS
 # ============================
-def get_jig_rows(category):
-    ws = book.worksheet(CATEGORY_SHEETS[category])
-    values = ws.get_all_values()
-
-    rows = []
-    for idx, row in enumerate(values[1:], start=2):
-        jig = row[COL_JIG - 1]
-        desc = row[COL_DESC - 1]
-        status = row[COL_STATUS - 1]
-
-        # Chỉ hiển thị JIG đang "在庫" hoặc "予約"
-        if status != "貸出中":
-            rows.append({
-                "category": category,
-                "row": idx,
-                "jig": jig,
-                "desc": desc,
-                "status": status,
-                "user": row[COL_USER - 1],
-                "borrow_date": row[COL_BORROW_DATE - 1],
-                "return_date": row[COL_RETURN_DATE - 1],
-            })
-    return rows
-
-
-def get_returnable_rows():
-    rows = []
+def find_jig(jig_id):
+    """
+    Tìm JIG trong tất cả category.
+    Trả về (category, row, row_data) hoặc (None, None, None)
+    """
     for category, sheet_name in CATEGORY_SHEETS.items():
         ws = book.worksheet(sheet_name)
         values = ws.get_all_values()
 
         for idx, row in enumerate(values[1:], start=2):
-            status = row[COL_STATUS - 1]
-            if status == "貸出中":
-                rows.append({
-                    "category": category,
-                    "row": idx,
-                    "jig": row[COL_JIG - 1],
-                    "desc": row[COL_DESC - 1],
-                    "user": row[COL_USER - 1],
-                    "borrow_date": row[COL_BORROW_DATE - 1],
-                    "return_date": row[COL_RETURN_DATE - 1],
-                })
-    return rows
+            if row[COL_JIG - 1] == jig_id:
+                return category, idx, row
+
+    return None, None, None
+
+
+def today():
+    return datetime.now().strftime("%Y/%m/%d")
 
 
 # ============================
-# UPDATE FUNCTIONS
+# BORROW
 # ============================
-def update_status(category, row, status):
-    ws = book.worksheet(CATEGORY_SHEETS[category])
-    ws.update_cell(row, COL_STATUS, status)
+def borrow_jig(jig_id, qty):
+    category, row, row_data = find_jig(jig_id)
 
-def update_user(category, row, user):
-    ws = book.worksheet(CATEGORY_SHEETS[category])
-    ws.update_cell(row, COL_USER, user)
+    if not category:
+        return False, f"JIG ID {jig_id} は存在しません。"
 
-def update_note(category, row, note):
-    ws = book.worksheet(CATEGORY_SHEETS[category])
-    ws.update_cell(row, COL_NOTE, note)
+    status = row_data[COL_STATUS - 1]
 
-def update_reserve_date(category, row, date):
-    ws = book.worksheet(CATEGORY_SHEETS[category])
-    ws.update_cell(row, COL_RESERVE_DATE, date)
+    if status == "貸出中":
+        return False, f"JIG {jig_id} は既に貸出中です。"
 
-def update_borrow_date(category, row, date):
+    # Update status
     ws = book.worksheet(CATEGORY_SHEETS[category])
-    ws.update_cell(row, COL_BORROW_DATE, date)
+    ws.update_cell(row, COL_STATUS, "貸出中")
+    ws.update_cell(row, COL_USER, "WEB USER")
+    ws.update_cell(row, COL_BORROW_DATE, today())
+    ws.update_cell(row, COL_RETURN_DATE, "")
+    ws.update_cell(row, COL_RESERVE_DATE, "")
 
-def update_return_date(category, row, date):
-    ws = book.worksheet(CATEGORY_SHEETS[category])
-    ws.update_cell(row, COL_RETURN_DATE, date)
+    return True, (
+        f"【JIG 借用 完了】\n"
+        f"JIG ID: {jig_id}\n"
+        f"数量: {qty}\n"
+        f"借用日: {today()}"
+    )
+
+
 # ============================
-# CONSUMABLE FUNCTIONS (FINAL)
+# RETURN
 # ============================
+def return_jig(jig_id, qty):
+    category, row, row_data = find_jig(jig_id)
 
+    if not category:
+        return False, f"JIG ID {jig_id} は存在しません。"
+
+    status = row_data[COL_STATUS - 1]
+
+    if status != "貸出中":
+        return False, f"JIG {jig_id} は貸出中ではありません。"
+
+    ws = book.worksheet(CATEGORY_SHEETS[category])
+    ws.update_cell(row, COL_STATUS, "在庫")
+    ws.update_cell(row, COL_USER, "")
+    ws.update_cell(row, COL_RETURN_DATE, today())
+
+    return True, (
+        f"【JIG 返却 完了】\n"
+        f"JIG ID: {jig_id}\n"
+        f"返却数量: {qty}\n"
+        f"返却日: {today()}"
+    )
+
+
+# ============================
+# RESERVE
+# ============================
+def reserve_jig(jig_id, qty):
+    category, row, row_data = find_jig(jig_id)
+
+    if not category:
+        return False, f"JIG ID {jig_id} は存在しません。"
+
+    status = row_data[COL_STATUS - 1]
+
+    if status == "貸出中":
+        return False, f"JIG {jig_id} は貸出中のため予約できません。"
+
+    ws = book.worksheet(CATEGORY_SHEETS[category])
+    ws.update_cell(row, COL_STATUS, "予約")
+    ws.update_cell(row, COL_USER, "WEB USER")
+    ws.update_cell(row, COL_RESERVE_DATE, today())
+
+    return True, (
+        f"【JIG 予約 完了】\n"
+        f"JIG ID: {jig_id}\n"
+        f"数量: {qty}\n"
+        f"予約日: {today()}"
+    )
+
+
+# ============================
+# CONSUMABLES (giữ nguyên)
+# ============================
 def get_consumables():
-    """
-    Đọc sheet '消耗品管理'
-    Trả về list:
-    [
-        {"row": 2, "name": "パックリーナー(本)", "stock": 4},
-        {"row": 3, "name": "インシュロック100(パック)", "stock": 3},
-        ...
-    ]
-    """
     ws = book.worksheet(CONSUMABLE_SHEET)
     values = ws.get_all_values()
 
     results = []
-    for idx, row in enumerate(values[1:], start=2):  # bỏ dòng tiêu đề
+    for idx, row in enumerate(values[1:], start=2):
         name = row[0].strip()
         qty_raw = row[1].strip()
 
@@ -175,8 +194,5 @@ def get_consumables():
 
 
 def update_consumable_stock(row, new_stock):
-    """
-    Cập nhật tồn kho tại dòng 'row' cột B (在庫数)
-    """
     ws = book.worksheet(CONSUMABLE_SHEET)
     ws.update_cell(row, 2, new_stock)
