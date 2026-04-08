@@ -1,139 +1,118 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>SMT JIG 管理 Web</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            display: flex;
-            height: 100vh;
-            font-family: Arial, sans-serif;
-            background: #f2f2f2;
-        }
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: #f5f6fa;
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+    }
 
-        /* Sidebar */
+    /* SIDEBAR */
+    #sidebar {
+        width: 240px;
+        background: #2d3436;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        padding-top: 20px;
+        transition: 0.3s;
+    }
+
+    #sidebar h2 {
+        text-align: center;
+        margin-bottom: 20px;
+        font-size: 18px;
+        font-weight: 600;
+    }
+
+    .menu-item {
+        padding: 15px 20px;
+        cursor: pointer;
+        border-bottom: 1px solid #3d3d3d;
+        font-size: 16px;
+        transition: 0.2s;
+    }
+
+    .menu-item:hover {
+        background: #00cec9;
+    }
+
+    /* CONTENT */
+    #content {
+        flex: 1;
+        padding: 25px;
+        overflow-y: auto;
+        background: white;
+        border-radius: 12px 0 0 12px;
+        margin: 10px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.05);
+    }
+
+    #content h1 {
+        font-size: 22px;
+        margin-bottom: 15px;
+        color: #2d3436;
+    }
+
+    .category-button {
+        padding: 12px 18px;
+        background: #0984e3;
+        color: white;
+        border-radius: 8px;
+        margin: 8px 0;
+        display: inline-block;
+        cursor: pointer;
+        font-size: 16px;
+        transition: 0.2s;
+    }
+
+    .category-button:hover {
+        background: #0766b8;
+    }
+
+    /* FORM INPUT */
+    input[type="date"] {
+        padding: 10px;
+        font-size: 16px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        margin-bottom: 15px;
+    }
+
+    button {
+        padding: 12px 20px;
+        font-size: 16px;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+    }
+
+    /* RESPONSIVE FOR MOBILE */
+    @media (max-width: 768px) {
         #sidebar {
-            width: 240px;
-            background: #2c3e50;
-            color: white;
-            padding-top: 20px;
-            display: flex;
-            flex-direction: column;
+            width: 70px;
         }
 
         #sidebar h2 {
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 18px;
+            display: none;
         }
 
         .menu-item {
-            padding: 15px 20px;
-            cursor: pointer;
-            border-bottom: 1px solid #34495e;
+            font-size: 0;
+            padding: 18px;
+            text-align: center;
         }
 
-        .menu-item:hover {
-            background: #1abc9c;
+        .menu-item::after {
+            content: "•";
+            font-size: 22px;
         }
 
-        /* Main content */
         #content {
-            flex: 1;
-            padding: 30px;
-            background: white;
-            overflow-y: auto;
+            margin: 0;
+            border-radius: 0;
         }
-
-        #content h1 {
-            font-size: 24px;
-            margin-bottom: 20px;
-        }
-
-        .category-button {
-            padding: 12px 20px;
-            background: #3498db;
-            color: white;
-            border-radius: 6px;
-            margin: 10px 0;
-            display: inline-block;
-            cursor: pointer;
-        }
-
-        .category-button:hover {
-            background: #2980b9;
-        }
-    </style>
-</head>
-
-<body>
-
-    <!-- Sidebar -->
-    <div id="sidebar">
-        <h2>メニュー</h2>
-        <div class="menu-item" onclick="showHome()">ホーム</div>
-        <div class="menu-item" onclick="showBorrow()">JIG 借用</div>
-        <div class="menu-item" onclick="showReturn()">JIG 返却</div>
-        <div class="menu-item" onclick="showReserve()">JIG 予約</div>
-        <div class="menu-item" onclick="showConsumable()">消耗品 使用</div>
-        <div class="menu-item" onclick="showStatus()">状況一覧</div>
-    </div>
-
-    <!-- Main content -->
-    <div id="content">
-        <h1>これは第1グループのJIG貸出・返却管理Webです</h1>
-        <p>左のメニューから操作を選択してください。</p>
-    </div>
-
-<script>
-    function showHome() {
-        document.getElementById("content").innerHTML = `
-            <h1>これは第1グループのJIG貸出・返却管理Webです</h1>
-            <p>左のメニューから操作を選択してください。</p>
-        `;
     }
-
-    function showBorrow() {
-        document.getElementById("content").innerHTML = `
-            <h1>JIG 借用</h1>
-            <div class="category-button">ヘッドOH用</div><br>
-            <div class="category-button">移設/新規納品用</div><br>
-            <div class="category-button">その他交換用</div><br>
-        `;
-    }
-
-    function showReturn() {
-        document.getElementById("content").innerHTML = `
-            <h1>JIG 返却</h1>
-            <p>貸出中のJIG一覧をここに表示します。</p>
-        `;
-    }
-
-    function showReserve() {
-        document.getElementById("content").innerHTML = `
-            <h1>JIG 予約</h1>
-            <div class="category-button">ヘッドOH用</div><br>
-            <div class="category-button">移設/新規納品用</div><br>
-            <div class="category-button">その他交換用</div><br>
-        `;
-    }
-
-    function showConsumable() {
-        document.getElementById("content").innerHTML = `
-            <h1>消耗品 使用</h1>
-            <p>消耗品リストをここに表示します。</p>
-        `;
-    }
-
-    function showStatus() {
-        document.getElementById("content").innerHTML = `
-            <h1>状況一覧</h1>
-            <p>全てのJIGの状態をここに表示します。</p>
-        `;
-    }
-</script>
-
-</body>
-</html>
+</style>
