@@ -6,47 +6,64 @@
     <title>ログ履歴</title>
 
     <style>
-        body { 
-            font-family: Arial; 
-            padding: 20px; 
-            font-size: 15px; 
+        body {
+            font-family: Arial;
+            font-size: 16px;
             background:#f5f5f5;
-            margin-left:200px; /* ĐẨY NỘI DUNG SANG PHẢI */
+            padding:20px;
         }
-        .sidebar {
-            width:180px;
-            background:#2c3e50;
-            color:white;
-            height:100vh;
-            padding:16px;
-            box-sizing:border-box;
-            position:fixed;
-            left:0;
-            top:0;
+
+        /* Nút 3 chấm */
+        .menu-btn {
+            position: fixed;
+            left: 10px;
+            top: 10px;
+            font-size: 28px;
+            cursor: pointer;
+            z-index: 1000;
         }
-        .sidebar a {
-            color:white; 
-            text-decoration:none; 
-            display:block; 
-            padding:8px 0;
-            font-size:15px;
+
+        /* Panel menu */
+        .menu-panel {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 180px;
+            height: 100vh;
+            background: #2c3e50;
+            padding: 20px;
+            display: none;
+            flex-direction: column;
+            z-index: 999;
         }
+
+        .menu-panel a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 0;
+            display: block;
+            font-size: 16px;
+        }
+
         .log-item {
             background:white;
             padding:12px 14px;
             margin-bottom:10px;
             border-radius:8px;
-            font-size:15px;
+            font-size:16px;
         }
     </style>
 </head>
 
 <body>
 
-<!-- SIDEBAR -->
-<div class="sidebar">
-    <h2>メニュー</h2>
-    <a href="/">JIG借用</a>
+<!-- Nút 3 chấm -->
+<div class="menu-btn" onclick="toggleMenu()">☰</div>
+
+<!-- Menu -->
+<div id="menu" class="menu-panel">
+    <a href="/">メインメニュー</a>
+    <a href="/borrow">JIG借用</a>
     <a href="/return">JIG返却</a>
     <a href="/logs">ログ履歴</a>
 </div>
@@ -56,6 +73,11 @@
 <div id="list"></div>
 
 <script>
+function toggleMenu() {
+    const menu = document.getElementById("menu");
+    menu.style.display = (menu.style.display === "block") ? "none" : "block";
+}
+
 fetch("/api/logs")
     .then(res => res.json())
     .then(data => {

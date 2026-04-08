@@ -3,131 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>JIG借用</title>
+    <title>JIG管理</title>
 
     <style>
         body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            display: flex;
+            font-family: Arial;
+            font-size: 16px;
             background: #f5f5f5;
-            font-size: 15px;
+            padding: 20px;
         }
 
-        .sidebar {
+        /* Nút 3 chấm */
+        .menu-btn {
+            position: fixed;
+            left: 10px;
+            top: 10px;
+            font-size: 28px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+
+        /* Panel menu */
+        .menu-panel {
+            position: fixed;
+            left: 0;
+            top: 0;
             width: 180px;
-            background: #2c3e50;
-            color: white;
             height: 100vh;
-            padding: 16px;
-            box-sizing: border-box;
+            background: #2c3e50;
+            padding: 20px;
+            display: none;
+            flex-direction: column;
+            z-index: 999;
         }
 
-        .sidebar a {
-            display: block;
-            padding: 10px 12px;
-            margin-bottom: 10px;
-            background: #34495e;
+        .menu-panel a {
             color: white;
             text-decoration: none;
-            border-radius: 8px;
-            font-size: 15px;
-        }
-
-        .content {
-            flex: 1;
-            padding: 18px;
-        }
-
-        .jig-item {
-            background: white;
-            padding: 12px 14px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            font-size: 15px;
-            display: flex;
-            align-items: center;
-        }
-
-        .jig-item input {
-            margin-right: 12px;
-            transform: scale(1.3);
-        }
-
-        .confirm-btn {
-            width: 100%;
-            padding: 14px;
-            font-size: 17px;
-            background: #27ae60;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            margin-top: 16px;
+            padding: 10px 0;
+            display: block;
+            font-size: 16px;
         }
     </style>
 </head>
 
 <body>
 
-<div class="sidebar">
-    <h2>メニュー</h2>
-    <a href="/">JIG借用</a>
+<!-- Nút 3 chấm -->
+<div class="menu-btn" onclick="toggleMenu()">☰</div>
+
+<!-- Menu -->
+<div id="menu" class="menu-panel">
+    <a href="/borrow">JIG借用</a>
     <a href="/return">JIG返却</a>
     <a href="/logs">ログ履歴</a>
-
 </div>
 
-<div class="content">
-    <h2>借用可能なJIG一覧</h2>
-
-    <div id="jigList"></div>
-
-    <label>借用日:</label><br>
-    <input id="startDate" type="date" style="padding:6px; font-size:15px; width:180px;"><br><br>
-
-    <label>返却予定日:</label><br>
-    <input id="endDate" type="date" style="padding:6px; font-size:15px; width:180px;"><br><br>
-
-    <button class="confirm-btn" onclick="confirmBorrow()">借用を確定する</button>
-</div>
+<h2>ようこそ！</h2>
+<p>これはチーム1のJIG管理ページです。</p>
+<p>左上の「☰」をクリックしてメニューを開いてください。</p>
 
 <script>
-fetch("/api/jigs")
-    .then(res => res.json())
-    .then(data => {
-        const list = document.getElementById("jigList");
-        data.items.forEach(jig => {
-            const div = document.createElement("div");
-            div.className = "jig-item";
-            div.innerHTML = `<input type="checkbox" value="${jig.id}"> ${jig.id} — ${jig.desc}`;
-            list.appendChild(div);
-        });
-    });
-
-function confirmBorrow() {
-    const selected = [...document.querySelectorAll("input[type=checkbox]:checked")].map(x => x.value);
-    if (selected.length === 0) return alert("JIGを選択してください");
-
-    const user = prompt("借用者の名前を入力してください");
-    if (!user) return;
-
-    const start = document.getElementById("startDate").value;
-    const end = document.getElementById("endDate").value;
-
-    if (!start || !end) return alert("日付を入力してください");
-
-    fetch("/api/borrow-final", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            jigs: selected,
-            start_date: start,
-            end_date: end,
-            user: user
-        })
-    })
-    .then(() => alert("借用完了"))
-    .then(() => location.reload());
+function toggleMenu() {
+    const menu = document.getElementById("menu");
+    menu.style.display = (menu.style.display === "block") ? "none" : "block";
 }
 </script>
 

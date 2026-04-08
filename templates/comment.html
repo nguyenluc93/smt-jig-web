@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>コメント入力</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            font-size: 16px;
+            background:#f5f5f5;
+            padding:20px;
+        }
+
+        .menu-btn {
+            position: fixed;
+            left: 10px;
+            top: 10px;
+            font-size: 28px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+
+        .menu-panel {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 180px;
+            height: 100vh;
+            background: #2c3e50;
+            padding: 20px;
+            display: none;
+            flex-direction: column;
+            z-index: 999;
+        }
+
+        .menu-panel a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 0;
+            display: block;
+            font-size: 16px;
+        }
+
+        textarea, input[type=text] {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            margin-top: 10px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            padding: 12px;
+            width: 100%;
+            font-size: 17px;
+            background: #2980b9;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            margin-top: 16px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="menu-btn" onclick="toggleMenu()">☰</div>
+
+<div id="menu" class="menu-panel">
+    <a href="/">メインメニュー</a>
+    <a href="/borrow">JIG借用</a>
+    <a href="/return">JIG返却</a>
+    <a href="/logs">ログ履歴</a>
+    <a href="/comment">コメント</a>
+</div>
+
+<h2>コメント入力</h2>
+
+<label>担当者:</label>
+<input id="userName" type="text" placeholder="名前を入力">
+
+<label>内容:</label>
+<textarea id="content" rows="5" placeholder="例: 2本ノズルが破損、1本紛失など"></textarea>
+
+<button onclick="sendComment()">送信</button>
+
+<script>
+function toggleMenu() {
+    const menu = document.getElementById("menu");
+    menu.style.display = (menu.style.display === "block") ? "none" : "block";
+}
+
+function sendComment() {
+    const user = document.getElementById("userName").value.trim();
+    const content = document.getElementById("content").value.trim();
+
+    if (!user) return alert("担当者名を入力してください。");
+    if (!content) return alert("内容を入力してください。");
+
+    fetch("/api/comment", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ user: user, content: content })
+    })
+    .then(() => {
+        alert("ご協力ありがとうございました。\nコメントが記録されました。");
+        window.location.href = "/";
+    });
+}
+</script>
+
+</body>
+</html>

@@ -1,190 +1,157 @@
 import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
-from oauth2client.service_account import ServiceAccountCredentials
-import json, os
-
-# dùng chung với app.py: GOOGLE_CREDENTIALS + SPREADSHEET_NAME
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
 
-creds_json = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 
-SPREADSHEET_NAME = "JIG_management"
-book = client.open(SPREADSHEET_NAME)
+SHEET_ID = "16VAlFUV_r41rBwW7TqUWMNMmHjKB8EX6l7ef9PZL5Hw"
 
-CATEGORY_SHEETS = {
-    "HEAD": "ヘッドOH用",
-    "MOVE": "移設/新規納品用",
-    "LINEAR": "その他交換用"
-}
+JIG_TABS = [
+    "ヘッドOH用",
+    "移設/新規納品用",
+    "その他交換用"
+]
 
-CONSUMABLE_SHEET = "消耗品"
-CONSUMABLE_LOG_SHEET = "消耗品ログ"
-LOG_HISTORY_SHEET = "ログ履歴"
+CONSUMABLES_TAB = "消耗品管理"
+LOG_TAB = "ログ"
+COMMENT_TAB = "コメント"  # ⬅️ tên tab comment bạn đặt; nếu khác, sửa lại cho khớp
 
-# ============================
-# JIG HELPERS
-# ============================
+cons_sheet = client.open_by_key(SHEET_ID).worksheet(CONSUMABLES_TAB)
+log_sheet = client.open_by_key(SHEET_ID).worksheet(LOG_TAB)
+comment_sheet = client.open_by_key(SHEET_ID).worksheet(COMMENT_TAB)
+
+
 def find_jig(jig_id):
-    """
-    Tìm JIG trong các sheet category.
-    Trả về: (category_key, row_index, row_values) hoặc (None, None, None)
-    """
-    for key, sheet_name in CATEGORY_SHEETS.items():
-        ws = book.worksheet(sheet_name)
-        values = ws.get_all_values()
-        for i, row in enumerate(values[1:], start=2):
-            if row[0] == jig_id:
-                return key, i, row
+    for tab in JIG_TABS:
+        ws = client.open_by_key(SHEET_ID).worksheet(tab)
+        data = ws.get_all_records()
+        for idx, row in enumerate(data, start=2):
+            if row["JIG番号"] == jig_id:
+                return ws, idx, row
     return None, None, None
 
-def get_jigs_by_category(category_key):
-    """
-    Lấy danh sách JIG có trạng thái '在庫' trong 1 category.
-    """
-    sheet_name = CATEGORY_SHEETS[category_key]
-    ws = book.worksheet(sheet_name)
-    values = ws.get_all_values()[1:]
 
+def get_jig_list(category):
     items = []
-    for row in values:
-        jig_id = row[0]
-        desc = row[1]
-        status = row[2]
-        if status == "在庫":
-            items.append({
-                "id": jig_id,
-                "desc": desc
-            })
-    return items
-
-def get_returnable_rows():
-    """
-    Lấy danh sách JIG đang '貸出中' từ tất cả category.
-    """
-    items = []
-    for key, sheet_name in CATEGORY_SHEETS.items():
-        ws = book.worksheet(sheet_name)
-        values = ws.get_all_values()[1:]
-        for row in values:
-            jig_id = row[0]
-            desc = row[1]
-            status = row[2]
-            user = row[3]
-            if status == "貸出中":
+    for tab in JIG_TABS:
+        ws = client.open_by_key(SHEET_ID).worksheet(tab)
+        data = ws.get_all_records()
+        for row in data:
+            if row["状態"] == "在庫":
                 items.append({
-                    "id": jig_id,
-                    "desc": desc,
-                    "user": user,
-                    "category": key
+                    "id": row["JIG番号"],
+                    "desc": row["説明"]
                 })
     return items
 
-def update_status(category_key, row, status):
-    ws = book.worksheet(CATEGORY_SHEETS[category_key])
-    ws.update_cell(row, 3, status)  # col C
 
-def update_user(category_key, row, user):
-    ws = book.worksheet(CATEGORY_SHEETS[category_key])
-    ws.update_cell(row, 4, user)  # col D
-
-def update_borrow_date(category_key, row, date_str):
-    ws = book.worksheet(CATEGORY_SHEETS[category_key])
-    ws.update_cell(row, 5, date_str)  # col E
-
-def update_return_date(category_key, row, date_str):
-    ws = book.worksheet(CATEGORY_SHEETS[category_key])
-    ws.update_cell(row, 6, date_str)  # col F
-
-# ============================
-# CONSUMABLES
-# ============================
-def get_consumables():
-    """
-    Lấy danh sách tiêu hao từ sheet 消耗品.
-    Giả định: col A = name, col B = stock
-    """
-    ws = book.worksheet(CONSUMABLE_SHEET)
-    values = ws.get_all_values()[1:]
-
+def get_returnable_list():
     items = []
-    for row in values:
-        name = row[0]
-        stock = row[1]
+    for tab in JIG_TABS:
+        ws = client.open_by_key(SHEET_ID).worksheet(tab)
+        data = ws.get_all_records()
+        for row in data:
+            if row["状態"] == "貸出中":
+                items.append({
+                    "id": row["JIG番号"],
+                    "desc": row["説明"],
+                    "user": row["使用者"]
+                })
+    return items
+
+
+def write_borrow(jig, start_date, end_date, user):
+    ws, idx, row = find_jig(jig)
+    if ws is None:
+        return
+
+    ws.update_cell(idx, 3, "貸出中")
+    ws.update_cell(idx, 4, user)
+    ws.update_cell(idx, 6, start_date)
+    ws.update_cell(idx, 7, start_date)
+    ws.update_cell(idx, 8, end_date)
+
+    log_sheet.append_row([
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        jig,
+        user,
+        start_date,
+        "",
+        "BORROW"
+    ])
+
+
+def write_return(jig, return_date):
+    ws, idx, row = find_jig(jig)
+    if ws is None:
+        return ""
+
+    user = row["使用者"]
+
+    ws.update_cell(idx, 3, "在庫")
+    ws.update_cell(idx, 4, "")
+    ws.update_cell(idx, 8, return_date)
+
+    log_sheet.append_row([
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        jig,
+        user,
+        row["借出日"],
+        return_date,
+        "RETURN"
+    ])
+
+    return user
+
+
+def get_consumables():
+    data = cons_sheet.get_all_records()
+    items = []
+    for row in data:
         items.append({
-            "name": name,
-            "stock": stock
+            "name": row["NAME"],
+            "stock": row["STOCK"]
         })
     return items
 
-def update_consumable_stock(name, used_qty):
-    """
-    Trừ tồn kho trong sheet 消耗品.
-    """
-    ws = book.worksheet(CONSUMABLE_SHEET)
-    values = ws.get_all_values()
-    for i, row in enumerate(values[1:], start=2):
-        if row[0] == name:
-            try:
-                current = int(row[1])
-            except:
-                current = 0
-            new_val = current - used_qty
-            ws.update_cell(i, 2, new_val)
-            break
 
-def log_consumable(name, qty, user, jig_id):
-    """
-    Ghi log tiêu hao vào sheet 消耗品ログ.
-    """
-    try:
-        ws = book.worksheet(CONSUMABLE_LOG_SHEET)
-    except:
-        ws = book.add_worksheet(CONSUMABLE_LOG_SHEET, rows=1000, cols=10)
-        ws.append_row(["日時", "消耗品", "数量", "ユーザー", "JIG"])
+def write_consumables(jig, user, items):
+    data = cons_sheet.get_all_records()
+    for item in items:
+        name = item["name"]
+        qty = item["qty"]
+        for idx, row in enumerate(data, start=2):
+            if row["NAME"] == name:
+                new_stock = int(row["STOCK"]) - qty
+                cons_sheet.update_cell(idx, 2, new_stock)
+                break
+    # không ghi log tiêu hao
 
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")
-    ws.append_row([now, name, qty, user, jig_id])
-
-# ============================
-# LOG LỊCH SỬ MƯỢN/TRẢ
-# ============================
-def log_history(jig, user, borrow_date, return_date):
-    """
-    Ghi lịch sử mượn/trả vào sheet ログ履歴.
-    KHÔNG liên quan đến tiêu hao.
-    """
-    try:
-        ws = book.worksheet(LOG_HISTORY_SHEET)
-    except:
-        ws = book.add_worksheet(LOG_HISTORY_SHEET, rows=1000, cols=10)
-        ws.append_row(["日時", "JIG", "借用者", "借用日", "返却日"])
-
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")
-    ws.append_row([now, jig, user, borrow_date, return_date])
 
 def get_logs():
-    """
-    Lấy toàn bộ lịch sử mượn/trả từ ログ履歴.
-    """
-    try:
-        ws = book.worksheet(LOG_HISTORY_SHEET)
-    except:
-        return []
-
-    values = ws.get_all_values()[1:]
+    data = log_sheet.get_all_records()
     items = []
-    for row in values:
+    for row in data:
         items.append({
-            "datetime": row[0],
-            "jig": row[1],
-            "user": row[2],
-            "borrow_date": row[3],
-            "return_date": row[4]
+            "datetime": row["DATETIME"],
+            "jig": row["JIG"],
+            "user": row["USER"],
+            "borrow_date": row["BORROW_DATE"],
+            "return_date": row["RETURN_DATE"]
         })
     return items
+
+
+def write_comment(user, content):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    comment_sheet.append_row([
+        now,     # 入力日
+        user,    # 担当者
+        content  # 内容
+    ])

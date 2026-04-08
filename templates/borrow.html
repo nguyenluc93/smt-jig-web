@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>JIG返却</title>
+    <title>JIG借用</title>
 
     <style>
         body {
@@ -64,14 +64,14 @@
             padding: 12px;
             width: 100%;
             font-size: 17px;
-            background: #27ae60;
+            background: #2980b9;
             color: white;
             border: none;
             border-radius: 10px;
             margin-top: 16px;
         }
 
-        input[type=date] {
+        input[type=date], input[type=text] {
             padding: 6px;
             font-size: 16px;
             width: 200px;
@@ -92,16 +92,22 @@
     <a href="/logs">ログ履歴</a>
 </div>
 
-<h2>返却可能なJIG一覧</h2>
+<h2>借用可能なJIG一覧</h2>
 
 <div id="list"></div>
 
 <br>
 
-<label>返却日:</label><br>
-<input id="returnDate" type="date"><br><br>
+<label>借用日:</label><br>
+<input id="startDate" type="date"><br><br>
 
-<button onclick="confirmReturn()">返却を確定する</button>
+<label>返却予定日:</label><br>
+<input id="endDate" type="date"><br><br>
+
+<label>借用者名:</label><br>
+<input id="userName" type="text" placeholder="名前を入力"><br><br>
+
+<button onclick="confirmBorrow()">借用を確定する</button>
 
 <script>
 function toggleMenu() {
@@ -109,7 +115,7 @@ function toggleMenu() {
     menu.style.display = (menu.style.display === "block") ? "none" : "block";
 }
 
-fetch("/api/returnable")
+fetch("/api/jigs?category=HEAD")
     .then(res => res.json())
     .then(data => {
         const list = document.getElementById("list");
@@ -119,36 +125,39 @@ fetch("/api/returnable")
             div.className = "item";
             div.innerHTML = `
                 <input type="checkbox" value="${jig.id}">
-                <b>${jig.id}</b> — ${desc}<br>
-                <span style="color:#555;">借用者: ${jig.user}</span>
+                <b>${jig.id}</b> — ${desc}
             `;
             list.appendChild(div);
         });
     });
 
-function confirmReturn() {
+function confirmBorrow() {
     const selected = [...document.querySelectorAll("input[type=checkbox]:checked")].map(x => x.value);
     if (selected.length === 0) return alert("JIGを選択してください。");
 
-    const returnDate = document.getElementById("returnDate").value;
-    if (!returnDate) return alert("返却日を入力してください。");
+    const startDate = document.getElementById("startDate").value;
+    if (!startDate) return alert("借用日を入力してください。");
 
-    fetch("/api/return-final", {
+    const endDate = document.getElementById("endDate").value;
+    if (!endDate) return alert("返却予定日を入力してください。");
+
+    const user = document.getElementById("userName").value.trim();
+    if (!user) return alert("借用者名を入力してください。");
+
+    fetch("/api/borrow-final", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
             jigs: selected,
-            return_date: returnDate
+            start_date: startDate,
+            end_date: endDate,
+            user: user
         })
     })
     .then(res => res.json())
-    .then(data => {
-        const jig = selected[0];
-        const user = data.borrow_info[jig].user;
-
-        alert("ご利用ありがとうございました。\nJIGの返却が完了しました。\n次に消耗品の数量を入力してください（ある場合）。");
-
-        window.location.href = "/consumables?jig=" + jig + "&user=" + encodeURIComponent(user);
+    .then(() => {
+        alert("ご利用ありがとうございました。\nJIGの借用が完了しました。\n情報はデータに更新されました。");
+        window.location.href = "/";
     });
 }
 </script>
