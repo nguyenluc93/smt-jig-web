@@ -12,7 +12,7 @@ creds_json = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
 client = gspread.authorize(creds)
 
-SPREADSHEET_NAME = "SMT_JIG_DB"
+SPREADSHEET_NAME = "JIG_management"
 book = client.open(SPREADSHEET_NAME)
 
 CATEGORY_SHEETS = {
