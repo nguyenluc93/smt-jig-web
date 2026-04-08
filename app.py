@@ -39,11 +39,13 @@ from sheets import (
     update_return_date,
     get_consumables,
     update_consumable_stock,
-    log_consumable
+    log_consumable,
+    log_history,
+    get_logs
 )
 
 # ============================
-# ROUTES
+# ROUTES (PAGES)
 # ============================
 @app.route("/")
 def home():
@@ -57,7 +59,13 @@ def return_page():
 def consumables_page():
     return render_template("consumables.html")
 
-# GET JIG LIST BY CATEGORY
+@app.route("/logs")
+def logs_page():
+    return render_template("logs.html")
+
+# ============================
+# API: JIG LIST BY CATEGORY (BORROW)
+# ============================
 @app.route("/api/jigs")
 def api_jigs():
     category = request.args.get("category", "HEAD")
@@ -68,7 +76,9 @@ def api_jigs():
         "items": items
     })
 
-# BORROW FINAL
+# ============================
+# API: BORROW FINAL
+# ============================
 @app.route("/api/borrow-final", methods=["POST"])
 def api_borrow_final():
     data = request.json
@@ -86,17 +96,25 @@ def api_borrow_final():
             update_user(category, row, user)
             update_borrow_date(category, row, start_date)
             update_return_date(category, row, end_date)
+
+            # log lịch sử mượn
+            log_history(jig_id, user, start_date, end_date)
+
             results.append(f"{jig_id} を貸出しました。")
 
     return jsonify({"results": results})
 
-# RETURNABLE LIST
+# ============================
+# API: RETURNABLE LIST
+# ============================
 @app.route("/api/returnable")
 def api_returnable():
     items = get_returnable_rows()
     return jsonify({"items": items})
 
-# RETURN FINAL
+# ============================
+# API: RETURN FINAL
+# ============================
 @app.route("/api/return-final", methods=["POST"])
 def api_return_final():
     data = request.json
@@ -104,28 +122,49 @@ def api_return_final():
     return_date = data["return_date"]
 
     results = []
+    borrow_info = {}
 
     for jig_id in jig_list:
         category, row, row_data = find_jig(jig_id)
         if category:
+            # row_data: [id, desc, status, user, borrow_date, return_date, ...]
+            user = row_data[3]
+            borrow_date = row_data[4]
+
+            borrow_info[jig_id] = {
+                "user": user,
+                "borrow_date": borrow_date,
+                "return_date": return_date
+            }
+
             update_status(category, row, "在庫")
             update_user(category, row, "")
             update_return_date(category, row, return_date)
+
+            # log lịch sử trả
+            log_history(jig_id, user, borrow_date, return_date)
+
             results.append(f"{jig_id} を返却しました。")
 
     consumables = get_consumables()
 
     return jsonify({
         "results": results,
-        "consumables": consumables
+        "consumables": consumables,
+        "borrow_info": borrow_info
     })
 
-# GET CONSUMABLES
+# ============================
+# API: CONSUMABLES LIST
+# ============================
 @app.route("/api/consumables")
 def api_consumables():
     return jsonify({"items": get_consumables()})
 
-# CONSUMABLES FINAL
+# ============================
+# API: CONSUMABLES FINAL
+# (CHỈ CẬP NHẬT SHEET 消耗品 + LOG TIÊU HAO RIÊNG)
+# ============================
 @app.route("/api/consumables-final", methods=["POST"])
 def api_consumables_final():
     data = request.json
@@ -136,11 +175,24 @@ def api_consumables_final():
     for item in items:
         name = item["name"]
         qty = int(item["qty"])
+
+        # cập nhật tồn kho tiêu hao
         update_consumable_stock(name, qty)
+        # log tiêu hao riêng (không liên quan ログ履歴)
         log_consumable(name, qty, user, jig_id)
 
     return jsonify({"status": "ok"})
 
+# ============================
+# API: LOGS (LỊCH SỬ MƯỢN/TRẢ)
+# ============================
+@app.route("/api/logs")
+def api_logs():
+    items = get_logs()
+    return jsonify({"items": items})
+
+# ============================
 # MAIN
+# ============================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)

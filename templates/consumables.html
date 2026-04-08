@@ -6,7 +6,31 @@
     <title>消耗品確認</title>
 
     <style>
-        body { font-family: Arial; padding: 20px; font-size: 15px; background:#f5f5f5; }
+        body { 
+            font-family: Arial; 
+            padding: 20px; 
+            font-size: 15px; 
+            background:#f5f5f5;
+            margin-left:200px; /* ĐẨY NỘI DUNG SANG PHẢI */
+        }
+        .sidebar {
+            width:180px;
+            background:#2c3e50;
+            color:white;
+            height:100vh;
+            padding:16px;
+            box-sizing:border-box;
+            position:fixed;
+            left:0;
+            top:0;
+        }
+        .sidebar a {
+            color:white; 
+            text-decoration:none; 
+            display:block; 
+            padding:8px 0;
+            font-size:15px;
+        }
         .item {
             padding: 12px 14px;
             background: #fff;
@@ -29,6 +53,14 @@
 </head>
 
 <body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+    <h2>メニュー</h2>
+    <a href="/">JIG借用</a>
+    <a href="/return">JIG返却</a>
+    <a href="/logs">ログ履歴</a>
+</div>
 
 <h2>消耗品の使用確認</h2>
 <p>返却したJIG: <span id="jigName"></span></p>
