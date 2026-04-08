@@ -294,16 +294,113 @@ function submitBorrowDates() {
 }
 
 /* ============================
-   RETURN / RESERVE / STATUS
-   (Bạn sẽ gắn API sau)
+   RETURN FLOW
 ============================ */
 function showReturn() {
+    fetch("/api/returnable")
+        .then(res => res.json())
+        .then(data => {
+            let html = `<h1>返却可能なJIG一覧</h1>`;
+            html += `<form id="returnForm">`;
+
+            data.items.forEach(jig => {
+                html += `
+                    <label style="display:block; margin:8px 0;">
+                        <input type="checkbox" name="jig" value="${jig.id}">
+                        ${jig.id} — ${jig.desc}（借用者: ${jig.user}）
+                    </label>
+                `;
+            });
+
+            html += `
+                <br>
+                <button type="button" onclick="confirmReturnMulti()">返却を確定する</button>
+            `;
+
+            html += `</form>`;
+            document.getElementById("content").innerHTML = html;
+        });
+}
+
+function confirmReturnMulti() {
+    const form = document.getElementById("returnForm");
+    const selected = [...form.querySelectorAll("input[name='jig']:checked")]
+                    .map(cb => cb.value);
+
+    if (selected.length === 0) {
+        alert("JIGを選択してください。");
+        return;
+    }
+
+    window.selectedReturn = selected;
+
     document.getElementById("content").innerHTML = `
-        <h1>JIG 返却</h1>
-        <p>返却機能は現在準備中です。</p>
+        <h1>返却日を入力してください</h1>
+
+        <label>📤 返却日:</label><br>
+        <input id="returnDate" type="date"><br><br>
+
+        <button onclick="submitReturn()">確定</button>
     `;
 }
 
+function submitReturn() {
+    const date = document.getElementById("returnDate").value;
+
+    if (!date) {
+        alert("返却日を入力してください。");
+        return;
+    }
+
+    fetch("/api/return-final", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            jigs: window.selectedReturn,
+            return_date: date
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        let html = `<h1>返却結果</h1>`;
+        data.results.forEach(r => {
+            html += `<p>${r}</p>`;
+        });
+
+        html += `<br><h2>返却が完了しました。ありがとうございました。</h2>`;
+        document.getElementById("content").innerHTML = html;
+    });
+}
+
+/* ============================
+   STATUS LIST
+============================ */
+function showStatus() {
+    fetch("/api/status")
+        .then(res => res.json())
+        .then(data => {
+            let html = `<h1>JIG 状況一覧</h1>`;
+
+            data.items.forEach(jig => {
+                html += `
+                    <p>
+                        <b>${jig.id}</b> — ${jig.desc}<br>
+                        状態: ${jig.status}<br>
+                        使用者: ${jig.user || "ー"}<br>
+                        借出日: ${jig.borrow || "ー"}<br>
+                        返却予定日: ${jig.return || "ー"}
+                    </p>
+                    <hr>
+                `;
+            });
+
+            document.getElementById("content").innerHTML = html;
+        });
+}
+
+/* ============================
+   PLACEHOLDER
+============================ */
 function showReserve() {
     document.getElementById("content").innerHTML = `
         <h1>JIG 予約</h1>
@@ -315,13 +412,6 @@ function showConsumable() {
     document.getElementById("content").innerHTML = `
         <h1>消耗品 使用</h1>
         <p>消耗品管理は現在準備中です。</p>
-    `;
-}
-
-function showStatus() {
-    document.getElementById("content").innerHTML = `
-        <h1>状況一覧</h1>
-        <p>ステータス一覧は現在準備中です。</p>
     `;
 }
 </script>
