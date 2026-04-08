@@ -1,166 +1,126 @@
-from flask import Flask, render_template
-from flask_socketio import SocketIO, emit
-import os
-
-# ====== Sheets integration (bạn map vào sheets.py thật) ======
-from sheets import borrow_jig, return_jig, reserve_jig  # bạn sẽ tạo 3 hàm này
+from flask import Flask, request, jsonify, render_template
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import json, os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'smt-jig-secret'
 
-socketio = SocketIO(app)
+# ============================
+# GOOGLE SHEETS SETUP
+# ============================
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
 
-# session state: sid -> dict
-session_states = {}
+creds_json = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
+client = gspread.authorize(creds)
 
+SPREADSHEET_NAME = "SMT_JIG_DB"
+book = client.open(SPREADSHEET_NAME)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+CATEGORY_SHEETS = {
+    "HEAD": "ヘッドOH用",
+    "MOVE": "移設/新規納品用",
+    "LINEAR": "その他交換用"
+}
 
+# ============================
+# IMPORT SHEETS LOGIC
+# ============================
+from sheets import (
+    find_jig,
+    get_jigs_by_category,
+    get_returnable_rows,
+    update_status,
+    update_user,
+    update_borrow_date,
+    update_return_date
+)
 
-@socketio.on('connect')
-def handle_connect():
-    sid = getattr(socketio, 'sid', None)  # phòng khi dùng khác driver
-    print('Client connected')
-    emit('bot_message', {'message': '接続しました。ご用件を選択してください。'})
+# ============================
+# ROUTES
+# ============================
+@app.route("/")
+def home():
+    return render_template("index.html")
 
+# GET JIG LIST BY CATEGORY
+@app.route("/api/jigs")
+def api_jigs():
+    category = request.args.get("category")
+    items = get_jigs_by_category(category)
+    return jsonify({
+        "category": category,
+        "category_name": CATEGORY_SHEETS[category],
+        "items": items
+    })
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    print('Client disconnected')
+# BORROW FINAL
+@app.route("/api/borrow-final", methods=["POST"])
+def api_borrow_final():
+    data = request.json
+    jig_list = data["jigs"]
+    start_date = data["start_date"]
+    end_date = data["end_date"]
 
+    results = []
 
-# ========== FLOW ENTRY POINTS (từ quick buttons) ==========
+    for jig_id in jig_list:
+        category, row, row_data = find_jig(jig_id)
+        if category:
+            update_status(category, row, "貸出中")
+            update_user(category, row, "WEB_USER")
+            update_borrow_date(category, row, start_date)
+            update_return_date(category, row, end_date)
+            results.append(f"{jig_id} を貸出しました。")
 
-@socketio.on('user_action')
-def handle_user_action(data):
-    sid = getattr(socketio, 'sid', None)
-    action = data.get('action')
-    print(f"[USER ACTION] {action}")
+    return jsonify({"results": results})
 
-    if action == "borrow":
-        # start borrow flow
-        session_states[sid] = {"flow": "borrow", "step": 1, "data": {}}
-        emit('bot_message', {'message': '【JIG 借用】JIG ID を入力してください。'})
-    elif action == "return":
-        session_states[sid] = {"flow": "return", "step": 1, "data": {}}
-        emit('bot_message', {'message': '【JIG 返却】JIG ID を入力してください。'})
-    elif action == "reserve":
-        session_states[sid] = {"flow": "reserve", "step": 1, "data": {}}
-        emit('bot_message', {'message': '【JIG 予約】JIG ID を入力してください。'})
-    elif action == "consumables":
-        emit('bot_message', {'message': '【消耗品 使用】このフローは後で実装します。'})
-    elif action == "status":
-        emit('bot_message', {'message': '【状況一覧】このフローは後で実装します。'})
-    else:
-        emit('bot_message', {'message': '不明な操作です。'})
+# RETURNABLE LIST
+@app.route("/api/returnable")
+def api_returnable():
+    items = get_returnable_rows()
+    return jsonify({"items": items})
 
+# RETURN FINAL
+@app.route("/api/return-final", methods=["POST"])
+def api_return_final():
+    data = request.json
+    jig_list = data["jigs"]
+    return_date = data["return_date"]
 
-# ========== TEXT MESSAGE HANDLER (điều khiển toàn bộ flow) ==========
+    results = []
 
-@socketio.on('user_message')
-def handle_user_message(data):
-    sid = getattr(socketio, 'sid', None)
-    text = data.get('text', '').strip()
-    print(f"[USER TEXT] {text}")
+    for jig_id in jig_list:
+        category, row, row_data = find_jig(jig_id)
+        if category:
+            update_status(category, row, "在庫")
+            update_user(category, row, "")
+            update_return_date(category, row, return_date)
+            results.append(f"{jig_id} を返却しました。")
 
-    state = session_states.get(sid)
+    return jsonify({"results": results})
 
-    # nếu không có flow đang chạy → coi như chat tự do
-    if not state:
-        emit('bot_message', {'message': f"受信しました: {text}"})
-        return
-
-    flow = state.get("flow")
-    step = state.get("step", 1)
-    ctx = state.get("data", {})
-
-    # ===== BORROW FLOW =====
-    if flow == "borrow":
-        if step == 1:
-            # nhận JIG ID
-            ctx["jig_id"] = text
-            state["step"] = 2
-            emit('bot_message', {'message': f'JIG ID: {text}\n数量を入力してください。'})
-        elif step == 2:
-            # nhận quantity
-            if not text.isdigit():
-                emit('bot_message', {'message': '数量は数字で入力してください。'})
-                return
-            ctx["qty"] = int(text)
-            state["step"] = 3
-            emit('bot_message', {
-                'message': f'JIG ID: {ctx["jig_id"]}\n数量: {ctx["qty"]}\n\nこの内容で借用しますか？（はい / いいえ）'
+# STATUS LIST
+@app.route("/api/status")
+def api_status():
+    items = []
+    for category, sheet_name in CATEGORY_SHEETS.items():
+        ws = book.worksheet(sheet_name)
+        values = ws.get_all_values()
+        for row in values[1:]:
+            items.append({
+                "id": row[0],
+                "desc": row[1],
+                "status": row[2],
+                "user": row[3],
+                "borrow": row[6],
+                "return": row[7]
             })
-        elif step == 3:
-            if text in ["はい", "はい。", "はいです", "yes", "Yes"]:
-                # gọi Sheets
-                success, msg = borrow_jig(ctx["jig_id"], ctx["qty"])
-                emit('bot_message', {'message': msg})
-                session_states.pop(sid, None)
-            else:
-                emit('bot_message', {'message': 'キャンセルしました。最初からやり直してください。'})
-                session_states.pop(sid, None)
+    return jsonify({"items": items})
 
-    # ===== RETURN FLOW =====
-    elif flow == "return":
-        if step == 1:
-            ctx["jig_id"] = text
-            state["step"] = 2
-            emit('bot_message', {
-                'message': f'JIG ID: {text}\n返却数量を入力してください。'
-            })
-        elif step == 2:
-            if not text.isdigit():
-                emit('bot_message', {'message': '数量は数字で入力してください。'})
-                return
-            ctx["qty"] = int(text)
-            state["step"] = 3
-            emit('bot_message', {
-                'message': f'JIG ID: {ctx["jig_id"]}\n返却数量: {ctx["qty"]}\n\nこの内容で返却しますか？（はい / いいえ）'
-            })
-        elif step == 3:
-            if text in ["はい", "はい。", "はいです", "yes", "Yes"]:
-                success, msg = return_jig(ctx["jig_id"], ctx["qty"])
-                emit('bot_message', {'message': msg})
-                session_states.pop(sid, None)
-            else:
-                emit('bot_message', {'message': 'キャンセルしました。最初からやり直してください。'})
-                session_states.pop(sid, None)
-
-    # ===== RESERVE FLOW =====
-    elif flow == "reserve":
-        if step == 1:
-            ctx["jig_id"] = text
-            state["step"] = 2
-            emit('bot_message', {
-                'message': f'JIG ID: {text}\n予約数量を入力してください。'
-            })
-        elif step == 2:
-            if not text.isdigit():
-                emit('bot_message', {'message': '数量は数字で入力してください。'})
-                return
-            ctx["qty"] = int(text)
-            state["step"] = 3
-            emit('bot_message', {
-                'message': f'JIG ID: {ctx["jig_id"]}\n予約数量: {ctx["qty"]}\n\nこの内容で予約しますか？（はい / いいえ）'
-            })
-        elif step == 3:
-            if text in ["はい", "はい。", "はいです", "yes", "Yes"]:
-                success, msg = reserve_jig(ctx["jig_id"], ctx["qty"])
-                emit('bot_message', {'message': msg})
-                session_states.pop(sid, None)
-            else:
-                emit('bot_message', {'message': 'キャンセルしました。最初からやり直してください。'})
-                session_states.pop(sid, None)
-
-    # cập nhật lại state
-    state["data"] = ctx
-    session_states[sid] = state
-
-
-if __name__ == '__main__':
-    print("SMT JIG Web 起動中...")
-    port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host='0.0.0.0', port=port)
+# MAIN
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
