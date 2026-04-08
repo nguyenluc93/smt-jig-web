@@ -86,3 +86,48 @@ def update_borrow_date(category, row, date):
 def update_return_date(category, row, date):
     ws = book.worksheet(CATEGORY_SHEETS[category])
     ws.update_cell(row, 8, date)
+
+# ============================
+# CONSUMABLES SHEET
+# ============================
+
+CONSUMABLE_SHEET = "消耗品"
+CONSUMABLE_LOG_SHEET = "消耗品ログ"
+
+# Get consumables list
+def get_consumables():
+    ws = book.worksheet(CONSUMABLE_SHEET)
+    values = ws.get_all_values()[1:]  # skip header
+
+    items = []
+    for row in values:
+        name = row[0]
+        stock = int(row[1]) if row[1].isdigit() else 0
+        items.append({"name": name, "stock": stock})
+    return items
+
+# Update consumable stock
+def update_consumable_stock(name, used_qty):
+    ws = book.worksheet(CONSUMABLE_SHEET)
+    values = ws.get_all_values()
+
+    for idx, row in enumerate(values[1:], start=2):
+        if row[0] == name:
+            current = int(row[1]) if row[1].isdigit() else 0
+            ws.update_cell(idx, 2, max(current - used_qty, 0))
+            return True
+    return False
+
+# Log consumable usage
+def log_consumable(name, qty, user, jig_id):
+    try:
+        ws = book.worksheet(CONSUMABLE_LOG_SHEET)
+    except:
+        ws = book.add_worksheet(CONSUMABLE_LOG_SHEET, rows=1000, cols=10)
+        ws.append_row(["日時", "消耗品", "数量", "ユーザー", "JIG"])
+
+    from datetime import datetime
+    now = datetime.now().strftime("%Y/%m/%d %H:%M")
+
+    ws.append_row([now, name, qty, user, jig_id])
+

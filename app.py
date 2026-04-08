@@ -36,7 +36,10 @@ from sheets import (
     update_status,
     update_user,
     update_borrow_date,
-    update_return_date
+    update_return_date,
+    get_consumables,
+    update_consumable_stock,
+    log_consumable
 )
 
 # ============================
@@ -46,10 +49,18 @@ from sheets import (
 def home():
     return render_template("index.html")
 
+@app.route("/return")
+def return_page():
+    return render_template("return.html")
+
+@app.route("/consumables")
+def consumables_page():
+    return render_template("consumables.html")
+
 # GET JIG LIST BY CATEGORY
 @app.route("/api/jigs")
 def api_jigs():
-    category = request.args.get("category")
+    category = request.args.get("category", "HEAD")
     items = get_jigs_by_category(category)
     return jsonify({
         "category": category,
@@ -64,6 +75,7 @@ def api_borrow_final():
     jig_list = data["jigs"]
     start_date = data["start_date"]
     end_date = data["end_date"]
+    user = data["user"]
 
     results = []
 
@@ -71,7 +83,7 @@ def api_borrow_final():
         category, row, row_data = find_jig(jig_id)
         if category:
             update_status(category, row, "貸出中")
-            update_user(category, row, "WEB_USER")
+            update_user(category, row, user)
             update_borrow_date(category, row, start_date)
             update_return_date(category, row, end_date)
             results.append(f"{jig_id} を貸出しました。")
@@ -101,25 +113,33 @@ def api_return_final():
             update_return_date(category, row, return_date)
             results.append(f"{jig_id} を返却しました。")
 
-    return jsonify({"results": results})
+    consumables = get_consumables()
 
-# STATUS LIST
-@app.route("/api/status")
-def api_status():
-    items = []
-    for category, sheet_name in CATEGORY_SHEETS.items():
-        ws = book.worksheet(sheet_name)
-        values = ws.get_all_values()
-        for row in values[1:]:
-            items.append({
-                "id": row[0],
-                "desc": row[1],
-                "status": row[2],
-                "user": row[3],
-                "borrow": row[6],
-                "return": row[7]
-            })
-    return jsonify({"items": items})
+    return jsonify({
+        "results": results,
+        "consumables": consumables
+    })
+
+# GET CONSUMABLES
+@app.route("/api/consumables")
+def api_consumables():
+    return jsonify({"items": get_consumables()})
+
+# CONSUMABLES FINAL
+@app.route("/api/consumables-final", methods=["POST"])
+def api_consumables_final():
+    data = request.json
+    user = data["user"]
+    jig_id = data["jig"]
+    items = data["items"]
+
+    for item in items:
+        name = item["name"]
+        qty = int(item["qty"])
+        update_consumable_stock(name, qty)
+        log_consumable(name, qty, user, jig_id)
+
+    return jsonify({"status": "ok"})
 
 # MAIN
 if __name__ == "__main__":

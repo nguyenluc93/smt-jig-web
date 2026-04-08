@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>消耗品確認</title>
+
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .item { padding: 12px; background: #fff; margin-bottom: 10px; border-radius: 8px; }
+        input[type=number] { width: 80px; padding: 6px; font-size: 16px; }
+        button { padding: 14px; width: 100%; font-size: 20px; background: #27ae60; color: white; border: none; border-radius: 10px; }
+    </style>
+</head>
+
+<body>
+
+<h2>消耗品の使用確認</h2>
+<p>返却したJIG: <span id="jigName"></span></p>
+
+<div id="list"></div>
+
+<button onclick="submitConsumables()">確定する</button>
+
+<script>
+const jig = new URLSearchParams(window.location.search).get("jig");
+document.getElementById("jigName").innerText = jig;
+
+fetch("/api/consumables")
+    .then(res => res.json())
+    .then(data => {
+        const list = document.getElementById("list");
+        data.items.forEach(item => {
+            const div = document.createElement("div");
+            div.className = "item";
+            div.innerHTML = `
+                <b>${item.name}</b> (在庫: ${item.stock})<br>
+                使用数: <input type="number" min="0" value="0" id="qty-${item.name}">
+            `;
+            list.appendChild(div);
+        });
+    });
+
+function submitConsumables() {
+    const inputs = document.querySelectorAll("input[type=number]");
+    const items = [];
+
+    inputs.forEach(i => {
+        const qty = parseInt(i.value);
+        if (qty > 0) {
+            items.push({
+                name: i.id.replace("qty-", ""),
+                qty: qty
+            });
+        }
+    });
+
+    const user = prompt("名前を入力してください");
+
+    fetch("/api/consumables-final", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            jig: jig,
+            user: user,
+            items: items
+        })
+    })
+    .then(() => {
+        alert("登録完了しました");
+        window.location.href = "/";
+    });
+}
+</script>
+
+</body>
+</html>

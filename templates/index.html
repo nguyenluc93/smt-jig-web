@@ -6,181 +6,61 @@
     <title>JIG管理システム</title>
 
     <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            display: flex;
-            background: #f5f5f5;
-            font-size: 16px;
-        }
-
-        /* Sidebar */
-        .sidebar {
-            width: 220px;
-            background: #2c3e50;
-            color: white;
-            height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        .menu-title {
-            font-size: 22px;
-            margin-bottom: 20px;
-            font-weight: bold;
-        }
-
-        .sidebar a {
-            display: block;
-            padding: 12px;
-            margin-bottom: 10px;
-            background: #34495e;
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-size: 18px;
-        }
-
-        /* Main content */
-        .content {
-            flex: 1;
-            padding: 20px;
-        }
-
-        .jig-item {
-            background: white;
-            padding: 14px;
-            margin-bottom: 12px;
-            border-radius: 10px;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-        }
-
-        .jig-item input {
-            margin-right: 12px;
-            transform: scale(1.4);
-        }
-
-        .confirm-btn {
-            width: 100%;
-            padding: 18px;
-            font-size: 20px;
-            background: #27ae60;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            margin-top: 20px;
-        }
-
-        /* Mobile optimization */
-        @media (max-width: 600px) {
-            body {
-                font-size: 18px;
-            }
-
-            .sidebar {
-                width: 180px;
-                padding: 18px;
-            }
-
-            .sidebar a {
-                font-size: 18px;
-                padding: 12px 10px;
-            }
-
-            .menu-title {
-                font-size: 22px;
-            }
-
-            .jig-item {
-                font-size: 18px;
-                padding: 14px;
-            }
-
-            .confirm-btn {
-                font-size: 20px;
-                padding: 18px;
-            }
-        }
+        body { margin: 0; font-family: Arial; display: flex; background: #f5f5f5; }
+        .sidebar { width: 220px; background: #2c3e50; color: white; height: 100vh; padding: 20px; }
+        .sidebar a { display: block; padding: 12px; background: #34495e; margin-bottom: 10px; color: white; border-radius: 8px; }
+        .content { flex: 1; padding: 20px; }
+        .jig-item { background: white; padding: 14px; margin-bottom: 12px; border-radius: 10px; }
+        .confirm-btn { width: 100%; padding: 18px; background: #27ae60; color: white; border: none; border-radius: 12px; font-size: 20px; }
     </style>
 </head>
 
 <body>
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="menu-title">メニュー</div>
-        <a href="#">JIG情報</a>
-        <a href="#">JIG登録</a>
-        <a href="#">JIG予約</a>
-        <a href="#">治具台使用</a>
-        <a href="#">状況一覧</a>
-    </div>
+<div class="sidebar">
+    <h2>メニュー</h2>
+    <a href="/">JIG借用</a>
+    <a href="/return">JIG返却</a>
+</div>
 
-    <!-- Main content -->
-    <div class="content">
-        <h2>ヘッドOH用 — 借用可能なJIG一覧</h2>
-
-        <div id="jigList"></div>
-
-        <button class="confirm-btn" onclick="confirmBorrow()">借用を確定する</button>
-    </div>
+<div class="content">
+    <h2>借用可能なJIG一覧</h2>
+    <div id="jigList"></div>
+    <button class="confirm-btn" onclick="confirmBorrow()">借用を確定する</button>
+</div>
 
 <script>
-/* -------------------------------
-   Load JIG list from backend
---------------------------------*/
 fetch("/api/jigs")
     .then(res => res.json())
     .then(data => {
         const list = document.getElementById("jigList");
-        data.forEach(jig => {
+        data.items.forEach(jig => {
             const div = document.createElement("div");
             div.className = "jig-item";
-            div.innerHTML = `
-                <input type="checkbox" value="${jig}">
-                ${jig}
-            `;
+            div.innerHTML = `<input type="checkbox" value="${jig.id}"> ${jig.id} — ${jig.desc}`;
             list.appendChild(div);
         });
     });
 
-/* -------------------------------
-   Borrow Confirm
---------------------------------*/
 function confirmBorrow() {
-    const selected = [...document.querySelectorAll("input[type=checkbox]:checked")]
-        .map(x => x.value);
+    const selected = [...document.querySelectorAll("input[type=checkbox]:checked")].map(x => x.value);
+    if (selected.length === 0) return alert("JIGを選択してください");
 
-    if (selected.length === 0) {
-        alert("JIGを選択してください");
-        return;
-    }
-
-    // Step: Ask user name
-    const userName = prompt("借用者の名前を入力してください");
-
-    if (!userName || userName.trim() === "") {
-        alert("名前を入力してください");
-        return;
-    }
+    const user = prompt("借用者の名前を入力してください");
+    if (!user) return;
 
     fetch("/api/borrow-final", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
             jigs: selected,
             start_date: "2026/04/08",
             end_date: "2026/04/10",
-            user: userName
+            user: user
         })
     })
-    .then(res => res.json())
-    .then(data => {
-        alert("借用完了: " + userName);
-        location.reload();
-    });
+    .then(() => alert("借用完了"))
+    .then(() => location.reload());
 }
 </script>
 

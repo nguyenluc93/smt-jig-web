@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>JIG返却</title>
+
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .item { padding: 12px; background: #fff; margin-bottom: 10px; border-radius: 8px; }
+        button { padding: 14px; width: 100%; font-size: 20px; background: #2980b9; color: white; border: none; border-radius: 10px; }
+    </style>
+</head>
+
+<body>
+
+<h2>返却可能なJIG一覧</h2>
+
+<div id="list"></div>
+
+<button onclick="confirmReturn()">返却を確定する</button>
+
+<script>
+fetch("/api/returnable")
+    .then(res => res.json())
+    .then(data => {
+        const list = document.getElementById("list");
+        data.items.forEach(jig => {
+            const div = document.createElement("div");
+            div.className = "item";
+            div.innerHTML = `<input type="checkbox" value="${jig.id}"> ${jig.id} — ${jig.desc}`;
+            list.appendChild(div);
+        });
+    });
+
+function confirmReturn() {
+    const selected = [...document.querySelectorAll("input[type=checkbox]:checked")].map(x => x.value);
+    if (selected.length === 0) return alert("選択してください");
+
+    fetch("/api/return-final", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            jigs: selected,
+            return_date: "2026/04/08"
+        })
+    })
+    .then(res => res.json())
+    .then(() => {
+        window.location.href = "/consumables?jig=" + selected[0];
+    });
+}
+</script>
+
+</body>
+</html>
