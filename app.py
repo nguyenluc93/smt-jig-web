@@ -1,43 +1,57 @@
 from flask import Flask, render_template, request, jsonify
+from flask_socketio import SocketIO
+import logging
+
+# ---------------------------
+# ENABLE FULL DEBUG LOGGING
+# ---------------------------
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 from sheets import (
     get_jig_list,
-    get_returnable_list,
     write_borrow,
+    get_returnable_list,
     write_return,
-    write_consumables,
-    get_logs,
-    write_comment,   # ⬅️ mới thêm
-    get_consumables  # nếu bạn đã tách riêng, giữ lại
+    write_comment
 )
 
 app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 
 # ---------------------------
-# ROUTES (HTML PAGES)
+# ROUTES
 # ---------------------------
 
 @app.route("/")
-def index():
-    return render_template("index.html")
+def menu():
+    logger.debug("Menu page loaded")
+    return render_template("menu.html")
+
 
 @app.route("/borrow")
-def borrow_page():
+def borrow():
+    logger.debug("Borrow page loaded")
     return render_template("borrow.html")
+
 
 @app.route("/return")
 def return_page():
+    logger.debug("Return page loaded")
     return render_template("return.html")
 
+
 @app.route("/consumables")
-def consumables_page():
+def consumables():
+    logger.debug("Consumables page loaded")
     return render_template("consumables.html")
 
-@app.route("/logs")
-def logs_page():
-    return render_template("logs.html")
 
 @app.route("/comment")
-def comment_page():
+def comment():
+    logger.debug("Comment page loaded")
     return render_template("comment.html")
 
 
@@ -45,88 +59,74 @@ def comment_page():
 # API ENDPOINTS
 # ---------------------------
 
-@app.route("/api/jigs")
-def api_jigs():
-    category = request.args.get("category", "")
-    items = get_jig_list(category)
-    return jsonify({"items": items})
+@app.route("/api/get_jigs", methods=["GET"])
+def api_get_jigs():
+    try:
+        category = request.args.get("category", "")
+        logger.debug(f"API get_jigs called with category={category}")
+        items = get_jig_list(category)
+        return jsonify({"status": "ok", "items": items})
+    except Exception as e:
+        logger.exception("Error in /api/get_jigs")
+        return jsonify({"status": "error", "message": str(e)})
 
 
-@app.route("/api/returnable")
-def api_returnable():
-    items = get_returnable_list()
-    return jsonify({"items": items})
+@app.route("/api/borrow", methods=["POST"])
+def api_borrow():
+    try:
+        data = request.json
+        logger.debug(f"API borrow called with data={data}")
+        write_borrow(
+            data["jig"],
+            data["start_date"],
+            data["end_date"],
+            data["user"]
+        )
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.exception("Error in /api/borrow")
+        return jsonify({"status": "error", "message": str(e)})
 
 
-@app.route("/api/borrow-final", methods=["POST"])
-def api_borrow_final():
-    data = request.get_json()
-    jigs = data["jigs"]
-    start_date = data["start_date"]
-    end_date = data["end_date"]
-    user = data["user"]
-
-    for jig in jigs:
-        write_borrow(jig, start_date, end_date, user)
-
-    return jsonify({"status": "ok"})
+@app.route("/api/get_returnable", methods=["GET"])
+def api_get_returnable():
+    try:
+        logger.debug("API get_returnable called")
+        items = get_returnable_list()
+        return jsonify({"status": "ok", "items": items})
+    except Exception as e:
+        logger.exception("Error in /api/get_returnable")
+        return jsonify({"status": "error", "message": str(e)})
 
 
-@app.route("/api/return-final", methods=["POST"])
-def api_return_final():
-    data = request.get_json()
-    jigs = data["jigs"]
-    return_date = data["return_date"]
-
-    borrow_info = {}
-    for jig in jigs:
-        user = write_return(jig, return_date)
-        borrow_info[jig] = {"user": user}
-
-    return jsonify({
-        "status": "ok",
-        "borrow_info": borrow_info
-    })
-
-
-@app.route("/api/consumables")
-def api_consumables():
-    items = get_consumables()
-    return jsonify({"items": items})
-
-
-@app.route("/api/consumables-final", methods=["POST"])
-def api_consumables_final():
-    data = request.get_json()
-    jig = data["jig"]
-    user = data["user"]
-    items = data["items"]
-
-    if len(items) > 0:
-        write_consumables(jig, user, items)
-
-    return jsonify({"status": "ok"})
-
-
-@app.route("/api/logs")
-def api_logs():
-    items = get_logs()
-    return jsonify({"items": items})
+@app.route("/api/return", methods=["POST"])
+def api_return():
+    try:
+        data = request.json
+        logger.debug(f"API return called with data={data}")
+        user = write_return(data["jig"], data["return_date"])
+        return jsonify({"status": "ok", "user": user})
+    except Exception as e:
+        logger.exception("Error in /api/return")
+        return jsonify({"status": "error", "message": str(e)})
 
 
 @app.route("/api/comment", methods=["POST"])
 def api_comment():
-    data = request.get_json()
-    user = data["user"]
-    content = data["content"]
-
-    write_comment(user, content)
-    return jsonify({"status": "ok"})
+    try:
+        data = request.json
+        logger.debug(f"API comment called with data={data}")
+        write_comment(data["user"], data["content"])
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.exception("Error in /api/comment")
+        return jsonify({"status": "error", "message": str(e)})
 
 
 # ---------------------------
-# RUN
+# RUN APP
 # ---------------------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    logger.debug("Starting Flask server with SocketIO")
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
