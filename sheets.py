@@ -2,13 +2,22 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
+# ---------------------------
+# GOOGLE SHEETS LOGIN
+# ---------------------------
+
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
 
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+# Đọc file JSON local, không dùng ENV
+creds = ServiceAccountCredentials.from_json_keyfile_name("google_credentials.json", scope)
 client = gspread.authorize(creds)
+
+# ---------------------------
+# SHEET CONFIG
+# ---------------------------
 
 SHEET_ID = "16VAlFUV_r41rBwW7TqUWMNMmHjKB8EX6l7ef9PZL5Hw"
 
@@ -20,12 +29,16 @@ JIG_TABS = [
 
 CONSUMABLES_TAB = "消耗品管理"
 LOG_TAB = "ログ"
-COMMENT_TAB = "コメント"  # ⬅️ tên tab comment bạn đặt; nếu khác, sửa lại cho khớp
+COMMENT_TAB = "comment"
 
 cons_sheet = client.open_by_key(SHEET_ID).worksheet(CONSUMABLES_TAB)
 log_sheet = client.open_by_key(SHEET_ID).worksheet(LOG_TAB)
 comment_sheet = client.open_by_key(SHEET_ID).worksheet(COMMENT_TAB)
 
+
+# ---------------------------
+# FIND JIG
+# ---------------------------
 
 def find_jig(jig_id):
     for tab in JIG_TABS:
@@ -36,6 +49,10 @@ def find_jig(jig_id):
                 return ws, idx, row
     return None, None, None
 
+
+# ---------------------------
+# GET JIG LIST
+# ---------------------------
 
 def get_jig_list(category):
     items = []
@@ -51,6 +68,10 @@ def get_jig_list(category):
     return items
 
 
+# ---------------------------
+# GET RETURNABLE LIST
+# ---------------------------
+
 def get_returnable_list():
     items = []
     for tab in JIG_TABS:
@@ -65,6 +86,10 @@ def get_returnable_list():
                 })
     return items
 
+
+# ---------------------------
+# WRITE BORROW
+# ---------------------------
 
 def write_borrow(jig, start_date, end_date, user):
     ws, idx, row = find_jig(jig)
@@ -86,6 +111,10 @@ def write_borrow(jig, start_date, end_date, user):
         "BORROW"
     ])
 
+
+# ---------------------------
+# WRITE RETURN
+# ---------------------------
 
 def write_return(jig, return_date):
     ws, idx, row = find_jig(jig)
@@ -110,43 +139,9 @@ def write_return(jig, return_date):
     return user
 
 
-def get_consumables():
-    data = cons_sheet.get_all_records()
-    items = []
-    for row in data:
-        items.append({
-            "name": row["NAME"],
-            "stock": row["STOCK"]
-        })
-    return items
-
-
-def write_consumables(jig, user, items):
-    data = cons_sheet.get_all_records()
-    for item in items:
-        name = item["name"]
-        qty = item["qty"]
-        for idx, row in enumerate(data, start=2):
-            if row["NAME"] == name:
-                new_stock = int(row["STOCK"]) - qty
-                cons_sheet.update_cell(idx, 2, new_stock)
-                break
-    # không ghi log tiêu hao
-
-
-def get_logs():
-    data = log_sheet.get_all_records()
-    items = []
-    for row in data:
-        items.append({
-            "datetime": row["DATETIME"],
-            "jig": row["JIG"],
-            "user": row["USER"],
-            "borrow_date": row["BORROW_DATE"],
-            "return_date": row["RETURN_DATE"]
-        })
-    return items
-
+# ---------------------------
+# WRITE COMMENT
+# ---------------------------
 
 def write_comment(user, content):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
